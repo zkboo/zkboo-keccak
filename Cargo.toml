@@ -1,0 +1,13 @@
+[package]
+name = "zkboo-keccak"
+version = "0.1.0"
+edition = "2024"
+license = "LGPL-3.0-or-later"
+description = "Keccak-256 (Ethereum) as a ZKBoo circuit."
+repository = "https://github.com/hashberg-io/zkboo-keccak"
+
+[dependencies]
+zkboo = { version = "0.1.0", features = ["u64"] }
+
+[dev-dependencies]
+zkboo = { version = "0.1.0", features = ["u64"] }
