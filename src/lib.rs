@@ -144,6 +144,11 @@ fn sponge<B: Backend>(
                 out.push(byte);
             }
         }
+        // Stop before permuting when the output is already complete (e.g. `output_len` an exact
+        // multiple of the rate): the extra permutation would be wasted circuit work.
+        if out.len() == output_len {
+            return out;
+        }
         keccak_f(&mut state);
     }
 }
