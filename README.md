@@ -2,23 +2,23 @@
 
 ![Rust](https://img.shields.io/badge/rust-1.92+-orange.svg)
 
-Keccak-256 (as used by Ethereum) as a [ZKBoo](https://crates.io/crates/zkboo) circuit.
+Keccak-256 (as used by Ethereum) and SHAKE256 (FIPS 202, as used by SLH-DSA) as [ZKBoo](https://crates.io/crates/zkboo) circuits.
 
-This is the **original Keccak** (domain-separation byte `0x01`), *not* NIST SHA3-256 (`0x06`) —
-Ethereum hashes with Keccak. It implements the full Keccak-f[1600] permutation (θ, ρ, π, χ, ι over
-24 rounds) on a 25-lane u64 state, which is bitwise-heavy and therefore a natural fit for ZKBoo.
+Both are sponges over the full Keccak-f[1600] permutation (θ, ρ, π, χ, ι over 24 rounds) on a 25-lane u64 state at a 136-byte rate, which is bitwise-heavy and therefore a natural fit for ZKBoo.
+Messages of arbitrary length are supported, and SHAKE256 squeezes output of arbitrary length.
 
-Only single-block messages (`< 136` bytes) are supported, which covers the Ethereum use case of
-hashing a 64-byte public key for address derivation.
+Keccak-256 here is the **original Keccak** (domain-separation byte `0x01`), *not* NIST SHA3-256 (`0x06`) — Ethereum hashes with Keccak.
+SHAKE256 uses the standard FIPS 202 domain-separation byte `0x1F`.
 
 ```rust
-use zkboo_keccak::keccak256;
+use zkboo_keccak::{keccak256, shake256};
 // inside a Circuit::exec, given `msg: Vec<WordRef<B, u8>>`:
 let digest = keccak256(frontend.allocator(), msg); // [WordRef<B, u8>; 32]
+let xof = shake256(frontend.allocator(), msg, 64); // Vec<WordRef<B, u8>> of the requested length
 ```
 
-Validated against the empty-string and `"abc"` Keccak-256 vectors. Used by
-[`zkboo-bip32`](https://crates.io/crates/zkboo-bip32) for Ethereum address derivation.
+Validated against Keccak-256 and SHAKE256 known-answer vectors (including padding-boundary and multi-block cases) and against the host-side Keccak-256 hasher.
+Used by [`zkboo-bip32`](https://crates.io/crates/zkboo-bip32) for Ethereum address derivation and by `zkboo-slhdsa` for SLH-DSA (SPHINCS+) hashing.
 
 ## 🚧 Warning 🚧
 
