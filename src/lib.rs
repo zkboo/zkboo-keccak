@@ -3,7 +3,7 @@
 //! Keccak-based hashing as [zkboo] circuits: Keccak-256 (as used by Ethereum) and the
 //! SHAKE256 extendable-output function (as used by SLH-DSA, FIPS 205).
 //!
-//! Both are sponges over the Keccak-f[1600] permutation with a 136-byte rate, differing only in
+//! Both are sponges over the Keccak-f\[1600\] permutation with a 136-byte rate, differing only in
 //! the domain-separation byte (`0x01` for original Keccak, `0x1F` for SHAKE) and the output
 //! length (fixed 32 bytes for Keccak-256, arbitrary for SHAKE256). Messages of arbitrary length
 //! are supported, absorbed one 136-byte block at a time.
