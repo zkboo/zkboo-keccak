@@ -1,10 +1,15 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 
-//! Keccak-256 (as used by Ethereum) as a [zkboo] circuit.
+//! Keccak-based hashing as [zkboo] circuits: Keccak-256 (as used by Ethereum) and the
+//! SHAKE256 extendable-output function (as used by SLH-DSA, FIPS 205).
 //!
-//! This is the original Keccak (domain-separation byte `0x01`), *not* NIST SHA3-256 (`0x06`).
-//! Only single-block messages (`< 136` bytes) are supported, which covers the Ethereum use case
-//! (hashing a 64-byte public key).
+//! Both are sponges over the Keccak-f[1600] permutation with a 136-byte rate, differing only in
+//! the domain-separation byte (`0x01` for original Keccak, `0x1F` for SHAKE) and the output
+//! length (fixed 32 bytes for Keccak-256, arbitrary for SHAKE256). Messages of arbitrary length
+//! are supported, absorbed one 136-byte block at a time.
+//!
+//! Note that Keccak-256 here is the original Keccak (domain-separation byte `0x01`), *not* NIST
+//! SHA3-256 (`0x06`) — Ethereum hashes with Keccak.
 //!
 //! See <https://keccak.team/keccak_specs_summary.html>.
 
@@ -14,8 +19,15 @@ extern crate alloc;
 use alloc::vec::Vec;
 use zkboo::backend::{Allocator, Backend, WordRef};
 
-/// The Keccak-256 rate in bytes (1088 bits): the number of message bytes absorbed per block.
+/// The Keccak-256/SHAKE256 rate in bytes (1088 bits): the number of message bytes absorbed
+/// (and output bytes squeezed) per block.
 pub const RATE_BYTES: usize = 136;
+
+/// The domain-separation byte of the original Keccak (as used by Ethereum).
+const KECCAK_DOMAIN: u8 = 0x01;
+
+/// The domain-separation byte of the SHAKE extendable-output functions (FIPS 202).
+const SHAKE_DOMAIN: u8 = 0x1F;
 
 /// Keccak lane rotation offsets `r[x][y]` for the ρ step.
 const RHO: [[u32; 5]; 5] = [
@@ -92,44 +104,70 @@ fn keccak_f<B: Backend>(a: &mut [WordRef<B, u64, 1>; 25]) {
     }
 }
 
-/// Computes the Keccak-256 digest of a single-block message (`msg.len() < 136`).
+/// The Keccak sponge at rate 136: pads `msg` with pad10*1 under the given domain-separation
+/// byte, absorbs it block by block, and squeezes `output_len` bytes.
+fn sponge<B: Backend>(
+    allocator: Allocator<B>,
+    msg: Vec<WordRef<B, u8>>,
+    domain: u8,
+    output_len: usize,
+) -> Vec<WordRef<B, u8>> {
+    // pad10*1: P = msg || domain || 0x00.. || (last |= 0x80), to a multiple of the rate.
+    // The 0x80 is XORed in, which is an OR here since bit 7 of both `domain` and 0x00 is clear.
+    let mut padded = msg;
+    padded.push(allocator.alloc(domain));
+    while padded.len() % RATE_BYTES != 0 {
+        padded.push(allocator.alloc(0x00u8));
+    }
+    let last = padded.pop().expect("padded block is non-empty");
+    padded.push(last ^ 0x80u8);
+
+    // Absorb: XOR each 136-byte block into the first 17 lanes (little-endian) and permute.
+    let mut state: [WordRef<B, u64, 1>; 25] = core::array::from_fn(|_| allocator.alloc(0u64));
+    for block in padded.chunks_exact(RATE_BYTES) {
+        for i in 0..RATE_BYTES / 8 {
+            let lane_bytes = block[8 * i..8 * i + 8].iter().cloned().collect::<Vec<_>>();
+            let lane = WordRef::<B, u64, 1>::from_le_bytes(lane_bytes).expect("8 bytes per lane");
+            state[i] = state[i].clone() ^ lane;
+        }
+        keccak_f(&mut state);
+    }
+
+    // Squeeze: read rate-many bytes per block (lanes 0..17, little-endian), permuting between blocks.
+    let mut out: Vec<WordRef<B, u8>> = Vec::with_capacity(output_len);
+    loop {
+        for lane in state.iter().take(RATE_BYTES / 8) {
+            for byte in lane.clone().into_le_bytes() {
+                if out.len() == output_len {
+                    return out;
+                }
+                out.push(byte);
+            }
+        }
+        keccak_f(&mut state);
+    }
+}
+
+/// Computes the Keccak-256 digest of a message of arbitrary length.
 ///
 /// `msg` is consumed; the 32-byte digest is returned.
 pub fn keccak256<B: Backend>(
     allocator: Allocator<B>,
     msg: Vec<WordRef<B, u8>>,
 ) -> [WordRef<B, u8>; 32] {
-    assert!(
-        msg.len() < RATE_BYTES,
-        "only single-block keccak256 is supported (msg < 136 bytes)"
-    );
+    return sponge(allocator, msg, KECCAK_DOMAIN, 32)
+        .try_into()
+        .ok()
+        .expect("32 output bytes");
+}
 
-    // pad10*1 with Keccak domain byte 0x01: P = msg || 0x01 || 0x00.. || (last |= 0x80).
-    let mut padded = msg;
-    padded.push(allocator.alloc(0x01u8));
-    while padded.len() < RATE_BYTES {
-        padded.push(allocator.alloc(0x00u8));
-    }
-    let last = padded.pop().expect("padded block is non-empty");
-    padded.push(last ^ 0x80u8);
-
-    // Absorb the single block into the (zero) state: the first 17 lanes are the message lanes
-    // (little-endian), the remaining 8 are zero.
-    let mut state: [WordRef<B, u64, 1>; 25] = core::array::from_fn(|i| {
-        if i < RATE_BYTES / 8 {
-            let lane_bytes = padded[8 * i..8 * i + 8].iter().cloned().collect::<Vec<_>>();
-            WordRef::<B, u64, 1>::from_le_bytes(lane_bytes).expect("8 bytes per lane")
-        } else {
-            allocator.alloc(0u64)
-        }
-    });
-
-    keccak_f(&mut state);
-
-    // Squeeze the first 256 bits: lanes 0..4, little-endian bytes.
-    let mut out: Vec<WordRef<B, u8>> = Vec::with_capacity(32);
-    for lane in state.into_iter().take(4) {
-        out.extend(lane.into_le_bytes());
-    }
-    return out.try_into().ok().expect("32 output bytes");
+/// Computes `output_len` bytes of SHAKE256 output for a message of arbitrary length.
+///
+/// `msg` is consumed; the output bytes are returned.
+pub fn shake256<B: Backend>(
+    allocator: Allocator<B>,
+    msg: Vec<WordRef<B, u8>>,
+    output_len: usize,
+) -> Vec<WordRef<B, u8>> {
+    return sponge(allocator, msg, SHAKE_DOMAIN, output_len);
 }
