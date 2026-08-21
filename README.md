@@ -20,9 +20,11 @@ let xof = shake256(frontend.allocator(), msg, 64); // Vec<WordRef<B, u8>> of the
 Validated against Keccak-256 and SHAKE256 known-answer vectors (including padding-boundary and multi-block cases) and against the host-side Keccak-256 hasher.
 Used by [`zkboo-bip32`](https://crates.io/crates/zkboo-bip32) for Ethereum address derivation and by `zkboo-slhdsa` for SLH-DSA (SPHINCS+) hashing.
 
-## 🚧 Warning 🚧
+## ⚠️ Unaudited ⚠️
 
-Work in progress, not yet suitable for production. Security has not been audited.
+The public API is stable as of 1.0.0, but this implementation has not undergone an external
+security review.
+Use at your own risk.
 
 ## License
 
