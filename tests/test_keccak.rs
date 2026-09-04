@@ -10,6 +10,7 @@ use zkboo::{
     executor::{OwnedFlexibleWordPool, exec},
 };
 use zkboo_keccak::{keccak256, shake256};
+use zkboo::executor::ExecOptions;
 
 type WP = OwnedFlexibleWordPool<usize>;
 
@@ -51,16 +52,16 @@ fn to_hex(bytes: &[u8]) -> String {
 }
 
 fn digest(msg: &[u8]) -> String {
-    let out = exec::<_, WP>(&KeccakCircuit { msg: msg.to_vec() }).u8;
+    let out = exec::<_, WP, _>(&KeccakCircuit { msg: msg.to_vec() }, ExecOptions::new()).u8;
     assert_eq!(out.len(), 32);
     return to_hex(&out);
 }
 
 fn shake(msg: &[u8], output_len: usize) -> String {
-    let out = exec::<_, WP>(&Shake256Circuit {
+    let out = exec::<_, WP, _>(&Shake256Circuit {
         msg: msg.to_vec(),
         output_len,
-    })
+    }, ExecOptions::new())
     .u8;
     assert_eq!(out.len(), output_len);
     return to_hex(&out);
