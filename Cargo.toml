@@ -1,6 +1,6 @@
 [package]
 name = "zkboo-keccak"
-version = "1.0.0"
+version = "1.2.0"
 edition = "2024"
 license = "LGPL-3.0-or-later"
 description = "Keccak-256 (Ethereum) and SHAKE256 as ZKBoo circuits."
@@ -11,8 +11,8 @@ keywords = ["zk", "zero-knowledge", "zkboo", "keccak", "shake256"]
 categories = ["cryptography", "no-std"]
 
 [dependencies]
-zkboo = { version = "1.0.0", features = ["u64"] }
+zkboo = { version = "1.2.0", features = ["u64"] }
 
 [dev-dependencies]
-zkboo = { version = "1.0.0", features = ["u64"] }
+zkboo = { version = "1.2.0", features = ["u64"] }
 tiny-keccak = { version = "2.0", default-features = false, features = ["keccak"] }
