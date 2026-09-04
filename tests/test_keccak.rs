@@ -6,9 +6,9 @@
 use zkboo::{
     backend::{Backend, Frontend},
     circuit::Circuit,
-    crypto::{Hasher, Keccak256Hasher},
     executor::{OwnedFlexibleWordPool, exec},
 };
+use tiny_keccak::{Hasher as _, Keccak};
 use zkboo_keccak::{keccak256, shake256};
 use zkboo::executor::ExecOptions;
 
@@ -87,10 +87,10 @@ fn test_keccak256_abc() {
 fn test_keccak256_multiblock_matches_host_hasher() {
     for len in [135, 136, 137, 300] {
         let msg = (0..len).map(|i| i as u8).collect::<Vec<u8>>();
-        let mut hasher = Keccak256Hasher::new();
+        let mut hasher = Keccak::v256();
         hasher.update(&msg);
         let mut expected = [0u8; 32];
-        hasher.finalize_into(&mut expected);
+        hasher.finalize(&mut expected);
         assert_eq!(digest(&msg), to_hex(&expected), "message length {len}");
     }
 }
